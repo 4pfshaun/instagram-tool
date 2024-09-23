@@ -1,7 +1,9 @@
-from instaloader.instaloader import Instaloader
-from instaloader.structures import Profile
-import argparse
+import os
 import time
+import argparse
+from instaloader import NodeIterator
+from instaloader.structures import Profile
+from instaloader.instaloader import Instaloader
 
 class Args:
     username: str
@@ -10,27 +12,27 @@ class Args:
 def login_instagram(username: str) -> Instaloader | None:
     loader = Instaloader()
     try:
-        loader.load_session_from_file(username, filename="session-username") # Replace with your username, please readme.md file to understand configuration.
+        loader.load_session_from_file(username, filename=f"session-{username}") 
         print(f"Session loaded for {username} from session!")
         return loader
     except FileNotFoundError:
-        print(f"Session file not found for {username}. Please run 'instaloader --login {username}' to generate one.")
-        return None
+        os.system(f"instaloader --login {username} --sessionfile session-{username}")
+        return login_instagram(username)
 
-def fetch_following(loader: Instaloader, username: str) -> set[str]:
+def fetch_following(loader: Instaloader, username: str) -> NodeIterator[Profile]:
     try:
         profile = Profile.from_username(loader.context, username)
-        following = {followee.username for followee in profile.get_followees()}
+        following = profile.get_followees()
         print(f"Found {len(following)} users you are following.")
         return following
     except Exception as e:
         print(f"An error occurred while fetching the following data: {e}")
         return set()
 
-def fetch_followers(loader: Instaloader, username: str) -> set[str]:
+def fetch_followers(loader: Instaloader, username: str) -> NodeIterator[Profile]:
     try:
         profile = Profile.from_username(loader.context, username)
-        followers = {follower.username for follower in profile.get_followers()}
+        followers = profile.get_followers()
         print(f"Found {len(followers)} users following you.")
         return followers
     except Exception as e:
@@ -43,8 +45,7 @@ def find_non_followers(followers: set[str], following: set[str]) -> set[str]:
 def save_results(non_followers: set[str], output_file: str) -> None:
     try:
         with open(output_file, 'w') as f:
-            for user in non_followers:
-                f.write(f"{user}\n")
+            f.write('\n'.join(non_followers))
         print(f"Results saved to {output_file}")
     except Exception as e:
         print(f"An error occurred while saving results: {e}")
@@ -52,7 +53,11 @@ def save_results(non_followers: set[str], output_file: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Instagram Followers Checker")
     parser.add_argument('--username', required=True, help="Instagram username")
-    parser.add_argument('--output', default="non_followers.txt", help="Output file for non-followers")
+    parser.add_argument(
+        '--output', 
+        default="non_followers.txt", 
+        help="Output file for non-followers"
+    )
 
     args = parser.parse_args(namespace=Args())
 
@@ -67,7 +72,7 @@ def main() -> None:
     following: set[str] = fetch_following(loader, username)
 
     # Add delay to avoid rate limits
-    time.sleep(300)
+    time.sleep(150)
 
     print("Fetching followers list...")
     followers: set[str] = fetch_followers(loader, username)
